@@ -1,41 +1,42 @@
 package com.example.trialpaymentapp
 
+import android.graphics.Bitmap // Required for qrBitmap state
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.Image // Required for Image composable
+import androidx.compose.foundation.BorderStroke // Required for BorderStroke class
+import androidx.compose.foundation.border // Required for border on Image/Box
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-// Changed to a more common icon to avoid potential specific 'Sync' icon issues
-import androidx.compose.material.icons.filled.Refresh 
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color // Required for BorderStroke color
+import androidx.compose.ui.graphics.asImageBitmap // Required to convert Bitmap to ImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextAlign // For text alignment
+import androidx.compose.ui.text.style.TextOverflow // For text overflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
-// Keep this import, the issue is likely with Gradle dependencies, not the import itself
-import androidx.lifecycle.viewmodel.compose.viewModel 
-
-// Corrected imports for local project classes
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.trialpaymentapp.data.Transaction
 import com.example.trialpaymentapp.data.TransactionDao
 import com.example.trialpaymentapp.ui.theme.TrialPaymentAppTheme
 import com.example.trialpaymentapp.ui.viewmodel.ReceiveMoneyViewModel
 import com.example.trialpaymentapp.ui.viewmodel.SendMoneyViewModel
 import com.example.trialpaymentapp.ui.viewmodel.TransactionHistoryViewModel
-// Removed unused import for PaymentApp as per analysis warning
-// import com.example.trialpaymentapp.PaymentApp 
-// Note: If PaymentApp is actually used (e.g. for Application context), this removal might need to be reverted
-// and the usage of 'context.applicationContext as PaymentApp' checked.
-// For now, assuming the warning was correct and it's not strictly needed for this file's compilation.
+// Ensure QrUtils is imported
+import com.example.trialpaymentapp.QrUtils 
 
 import java.text.SimpleDateFormat
 import java.util.*
@@ -73,9 +74,6 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             TrialPaymentAppTheme {
-                // TODO: Review if PaymentApp is needed here for Dao instantiation
-                // If dao line below causes an error due to removed PaymentApp import,
-                // that import needs to be restored and the app/build.gradle checked for PaymentApp's definition.
                 PaymentAppContent()
             }
         }
@@ -87,27 +85,13 @@ class MainActivity : ComponentActivity() {
 fun PaymentAppContent() {
     var currentScreen by remember { mutableStateOf<Screen>(Screen.Home) }
     val context = LocalContext.current
-    // TODO: Critical check: If 'PaymentApp' was correctly unused, how is 'dao' obtained?
-    // This line will fail if 'PaymentApp' was indeed necessary for getting the Application context.
-    // Assuming for now there's another way 'dao' is meant to be instantiated or it's provided differently.
-    // If this line is the source of a new error, the 'PaymentApp' import and its usage
-    // need to be reinstated and its own definition checked.
-    // For a temporary fix to allow compilation if PaymentApp is an issue:
-    // val dao = null // Placeholder - THIS WILL BREAK RUNTIME FUNCTIONALITY
-    // A more robust solution would be to properly provide the Dao,
-    // perhaps through a dependency injection framework or a correctly cast application context.
-    // For now, assuming PaymentApp was correctly identified as unused by the analyzer.
-    // The original line was:
     val dao = (context.applicationContext as? com.example.trialpaymentapp.PaymentApp)?.database?.transactionDao()
-    // This ?. an as? is a safeguard. If PaymentApp is not available or the cast fails, dao will be null.
-    // This will likely lead to runtime errors if dao is null and used.
 
     if (dao == null) {
-        // Handle the case where DAO could not be initialized
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text("Error: Could not initialize database. App functionality will be limited.")
         }
-        return // Early return to prevent further errors if DAO is null
+        return
     }
 
     val factory = BaseViewModelFactory(dao)
@@ -133,7 +117,7 @@ fun PaymentAppContent() {
                     if (currentScreen != Screen.Home) {
                         IconButton(onClick = {
                             if (currentScreen == Screen.SendMoney) {
-                                sendMoneyViewModel.clearQrData() 
+                                sendMoneyViewModel.clearQrData()
                             }
                             currentScreen = Screen.Home
                         }) {
@@ -144,7 +128,7 @@ fun PaymentAppContent() {
                 actions = {
                     if (currentScreen == Screen.TransactionHistory) {
                         IconButton(onClick = { transactionHistoryViewModel.syncUnsyncedTransactions() }) {
-                            Icon(Icons.Filled.Refresh, contentDescription = "Sync Transactions") // Changed to Refresh
+                            Icon(Icons.Filled.Refresh, contentDescription = "Sync Transactions")
                         }
                     }
                 }
@@ -176,22 +160,21 @@ fun HomeScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(16.dp), // Overall padding for the screen
+            .padding(16.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
             text = "Welcome to Offline Pay",
             style = MaterialTheme.typography.headlineMedium,
-            modifier = Modifier.padding(bottom = 24.dp) // Space below the title
+            modifier = Modifier.padding(bottom = 24.dp)
         )
-
         ElevatedButton(
             onClick = onSendMoneyClicked,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 8.dp) // Padding for each button
-                .height(56.dp) // Giving buttons a bit more height
+                .padding(vertical = 8.dp)
+                .height(56.dp)
         ) {
             Text("Send Money", style = MaterialTheme.typography.labelLarge)
         }
@@ -228,7 +211,7 @@ fun SendMoneyScreen(viewModel: SendMoneyViewModel) {
             .fillMaxSize()
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp) // Adds space between direct children
     ) {
         OutlinedTextField(
             value = amount,
@@ -253,34 +236,74 @@ fun SendMoneyScreen(viewModel: SendMoneyViewModel) {
         transactionFeedback?.let { feedback ->
             Text(
                 text = feedback,
-                modifier = Modifier.padding(vertical = 8.dp),
-                color = if (feedback.startsWith("Error:")) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                modifier = Modifier.padding(vertical = 8.dp), // Consistent padding
+                color = if (feedback.startsWith("Error:")) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                textAlign = TextAlign.Center
             )
         }
 
         encryptedQrString?.let { data ->
-            Spacer(modifier = Modifier.height(16.dp))
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = "Encrypted QR Data:", 
-                        style = MaterialTheme.typography.titleSmall
-                    )
-                    Text(
-                        text = data, 
-                        modifier = Modifier.padding(8.dp),
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Text(
-                        text = "(This text is the encrypted data. Implement QR code image generation here.)",
-                        style = MaterialTheme.typography.labelSmall,
-                        modifier = Modifier.padding(top=8.dp)
-                    )
+            // This Spacer provides space above the QR code section if transactionFeedback is also present
+            Spacer(modifier = Modifier.height(8.dp)) 
+            
+            Text(
+                text = "Scan QR Code:",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.align(Alignment.CenterHorizontally)
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Generate QR Code Bitmap when encryptedQrString is available
+            val qrBitmap: Bitmap? by remember(data) { // Use data as key for remember
+                derivedStateOf {
+                    QrUtils.generateQrCodeBitmap(text = data, width = 200, height = 200)
                 }
             }
+
+            if (qrBitmap != null) {
+                Image(
+                    bitmap = qrBitmap!!.asImageBitmap(),
+                    contentDescription = "Transaction QR Code",
+                    modifier = Modifier
+                        .size(200.dp)
+                        .align(Alignment.CenterHorizontally)
+                        .border(BorderStroke(1.dp, Color.Gray))
+                )
+            } else {
+                // Fallback if bitmap is null (e.g., error in generation, or still processing)
+                Box(
+                    modifier = Modifier
+                        .size(200.dp)
+                        .border(BorderStroke(1.dp, Color.LightGray))
+                        .align(Alignment.CenterHorizontally)
+                        .padding(16.dp), // Padding inside the box
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("Generating QR Code...", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Encrypted Data:",
+                style = MaterialTheme.typography.titleSmall, // Changed for visual hierarchy
+                modifier = Modifier.align(Alignment.CenterHorizontally)
+            )
+            Text(
+                text = data,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
+                    .align(Alignment.CenterHorizontally),
+                style = MaterialTheme.typography.bodySmall, // Smaller for the raw data
+                textAlign = TextAlign.Center,
+                maxLines = 3, // Prevent very long strings from taking too much space
+                overflow = TextOverflow.Ellipsis // Add ellipsis for overflow
+            )
         }
     }
 }
+
 
 @Composable
 fun ReceiveMoneyScreen(viewModel: ReceiveMoneyViewModel) {
@@ -295,7 +318,8 @@ fun ReceiveMoneyScreen(viewModel: ReceiveMoneyViewModel) {
     ) {
         ElevatedButton(
             onClick = {
-                viewModel.processScannedQrCode("encrypted_amount=50.0;senderTxId=test-sender-123;details=Test Payment;timestamp=1678886400000")
+                // Example of a more complete payload for testing ReceiveMoneyScreen
+                viewModel.processScannedQrCode("amount=50.0;senderTxId=test-sender-123;details=Test Payment by QR;timestamp=1678886400000;securityKey=someSecureString")
             },
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -305,7 +329,8 @@ fun ReceiveMoneyScreen(viewModel: ReceiveMoneyViewModel) {
             Text(
                 text = feedback,
                 modifier = Modifier.padding(top = 16.dp),
-                color = if (feedback.startsWith("Error:")) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                color = if (feedback.startsWith("Error:")) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                textAlign = TextAlign.Center
             )
         }
     }
@@ -363,11 +388,21 @@ fun HomeScreenPreview() {
 @Composable
 fun SendMoneyScreenPreview() {
     TrialPaymentAppTheme {
-        Column(modifier = Modifier.padding(16.dp)){
-            OutlinedTextField(value = "100", onValueChange = {}, label={Text("Amount")})
-            OutlinedTextField(value = "1234", onValueChange = {}, label={Text("PIN")})
-            Button(onClick={}){ Text("Generate QR & Save")}
-            Text("Encrypted QR Data: encrypted_amount=100...")
+        // Updated preview to reflect more of the SendMoneyScreen structure
+        Column(modifier = Modifier.fillMaxSize().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            OutlinedTextField(value = "100", onValueChange = {}, label={Text("Amount")}, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(value = "1234", onValueChange = {}, label={Text("PIN")}, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+            Button(onClick={}, modifier = Modifier.fillMaxWidth()){ Text("Generate QR & Save Transaction")}
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            Text("Scan QR Code:", style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(8.dp))
+            Box(modifier = Modifier.size(200.dp).border(BorderStroke(1.dp, Color.Gray)).padding(16.dp), contentAlignment = Alignment.Center) {
+                Text("QR Code Area (Preview)")
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Text("Encrypted Data:", style = MaterialTheme.typography.titleSmall)
+            Text("encrypted_data_string_for_preview_123...", textAlign = TextAlign.Center)
         }
     }
 }
