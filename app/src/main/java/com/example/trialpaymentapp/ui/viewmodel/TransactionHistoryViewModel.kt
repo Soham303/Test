@@ -11,9 +11,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-class TransactionHistoryViewModel(private val dao: TransactionDao) : ViewModel() {
-
-    val transactions: StateFlow<List<Transaction>> = dao.getAllTransactions()
+class TransactionHistoryViewModel(private val transactionDao: TransactionDao) : ViewModel() {
+    val transactions: StateFlow<List<Transaction>> = transactionDao.getAllTransactions()
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000L),
@@ -25,14 +24,14 @@ class TransactionHistoryViewModel(private val dao: TransactionDao) : ViewModel()
 
     fun syncUnsyncedTransactions() {
         viewModelScope.launch {
-            val unsynced = dao.getUnsyncedTransactions()
+            val unsynced = transactionDao.getUnsyncedTransactions()
             if (unsynced.isNotEmpty()) {
                 // Placeholder: In a real app, call SupabaseSyncService
                 // val success = supabaseSyncService.syncTransactions(unsynced)
                 // if (success) { // 
                 println("Simulating sync for: ${unsynced.size} transactions")
                 unsynced.forEach { transaction ->
-                    dao.updateTransactionSynced(transaction.id, true)
+                    transactionDao.updateTransactionSynced(transaction.id, true)
                 }
                 // }
             }

@@ -9,8 +9,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-class ReceiveMoneyViewModel(private val dao: TransactionDao) : ViewModel() {
-
+class ReceiveMoneyViewModel(private val transactionDao: TransactionDao) : ViewModel() {
     private val _scannedDataFeedback = MutableStateFlow<String?>(null)
     val scannedDataFeedback: StateFlow<String?> = _scannedDataFeedback.asStateFlow()
 
@@ -34,7 +33,7 @@ class ReceiveMoneyViewModel(private val dao: TransactionDao) : ViewModel() {
                     isSynced = false // Mark as unsynced initially, to be synced with backend later
                     // counterpartyId is already set by parseQrDataToTransaction from the QR data (e.g., sender's txId or deviceId)
                 )
-                dao.insertTransaction(receivedTransaction)
+                transactionDao.insertTransaction(receivedTransaction)
                 _scannedDataFeedback.value = "Transaction Received! Amount: ${receivedTransaction.amount}, Details: ${receivedTransaction.details}"
             } else {
                 _scannedDataFeedback.value = "Error: Invalid or unreadable QR code data."

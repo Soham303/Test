@@ -49,6 +49,7 @@ dependencies {
     implementation libs.androidx.ui.tooling.preview
     implementation libs.androidx.material3
     implementation libs.google.zxing.core // Added ZXing core dependency
+    implementation libs.androidx.security.crypto // <--- ADDED THIS LINE
 
     // Room dependencies
     implementation libs.androidx.room.runtime

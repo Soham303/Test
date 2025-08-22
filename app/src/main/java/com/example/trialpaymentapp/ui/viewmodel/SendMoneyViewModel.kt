@@ -1,7 +1,9 @@
 package com.example.trialpaymentapp.ui.viewmodel
 
-import androidx.lifecycle.ViewModel
+import android.app.Application // Added
+import androidx.lifecycle.AndroidViewModel // Changed from ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.trialpaymentapp.PinManager // Added
 import com.example.trialpaymentapp.data.Transaction
 import com.example.trialpaymentapp.data.TransactionDao
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -10,100 +12,107 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.util.UUID
 
-class SendMoneyViewModel(private val dao: TransactionDao) : ViewModel() {
+// Changed to AndroidViewModel to get Application context
+class SendMoneyViewModel(private val application: Application, private val transactionDao: TransactionDao) : AndroidViewModel(application) {
+    private val pinManager = PinManager(application) // Added PinManager instance
 
     private val _amountInput = MutableStateFlow("")
     val amountInput: StateFlow<String> = _amountInput.asStateFlow()
 
-    private val _pinInput = MutableStateFlow("") // For local authentication by sender
+    private val _pinInput = MutableStateFlow("")
     val pinInput: StateFlow<String> = _pinInput.asStateFlow()
 
-    // This will hold the encrypted string to be converted to a QR image by the UI
     private val _encryptedQrString = MutableStateFlow<String?>(null)
     val encryptedQrString: StateFlow<String?> = _encryptedQrString.asStateFlow()
 
     private val _transactionFeedback = MutableStateFlow<String?>(null)
     val transactionFeedback: StateFlow<String?> = _transactionFeedback.asStateFlow()
 
+    init {
+        // TEMPORARY: For testing PIN verification.
+        // In a real app, you need a proper PIN setup UI.
+        if (!pinManager.isPinSet()) {
+            pinManager.setPin("1234") // Set a default test PIN
+            // Log.d("SendMoneyViewModel", "Default PIN '1234' set for testing as no PIN was found.")
+        }
+    }
+
     fun updateAmount(amount: String) {
         _amountInput.value = amount
-        _encryptedQrString.value = null // Clear previous QR if amount changes
+        _encryptedQrString.value = null
         _transactionFeedback.value = null
     }
 
     fun updatePin(pin: String) {
         _pinInput.value = pin
-        _encryptedQrString.value = null // Clear previous QR if PIN changes
+        _encryptedQrString.value = null
         _transactionFeedback.value = null
     }
 
     fun prepareTransactionAndGenerateQr() {
-        val amount = _amountInput.value.toDoubleOrNull()
-        val pin = _pinInput.value // PIN for local sender authentication
+        val currentAmountStr = _amountInput.value
+        val currentPin = _pinInput.value
 
+        if (currentAmountStr.isBlank() || currentPin.isBlank()) {
+            _transactionFeedback.value = "Error: Amount and PIN cannot be empty."
+            _encryptedQrString.value = null
+            return
+        }
+
+        val amount = currentAmountStr.toDoubleOrNull()
         if (amount == null || amount <= 0) {
             _transactionFeedback.value = "Error: Invalid amount."
             _encryptedQrString.value = null
             return
         }
 
-        // TODO: Implement actual PIN validation logic here.
-        // For example, check against a stored hash, or minimum length/complexity.
-        // This is a placeholder for local authentication.
-        if (pin.isBlank() || !isValidPin(pin)) { // Assuming isValidPin is a local validation method
-            _transactionFeedback.value = "Error: Invalid PIN."
+        // --- PIN Verification Logic ---
+        if (!pinManager.isPinSet()) {
+            // This case should ideally not be hit if we auto-set a PIN in init for testing.
+            _transactionFeedback.value = "Error: App PIN not set up. Please set up a PIN first."
             _encryptedQrString.value = null
             return
         }
 
+        if (!pinManager.verifyPin(currentPin)) {
+            _transactionFeedback.value = "Error: Invalid PIN entered."
+            _encryptedQrString.value = null
+            _pinInput.value = "" // Clear PIN input on failure
+            return
+        }
+        // --- End of PIN Verification Logic ---
+
+        // If PIN is correct, proceed with transaction logic
         val transactionId = UUID.randomUUID().toString()
         val currentTime = System.currentTimeMillis()
-        // Details for the QR code - concise and relevant for the receiver
-        val qrDetails = "Payment" // Or allow user to input brief details
+        val qrDetails = "Payment"
 
-        // Data to be embedded in the QR code (pre-encryption)
-        // Format: "amount=VALUE;senderTxId=VALUE;details=VALUE;timestamp=VALUE"
         val qrDataPayload = "amount=$amount;senderTxId=$transactionId;details=$qrDetails;timestamp=$currentTime"
-
-        // TODO: Implement robust data encryption.
-        // The "encrypted security key" concept should be realized here.
-        // This could involve encrypting qrDataPayload with a key known to the app,
-        // or a key derived from the sender's credentials if meant for a specific receiver setup.
-        val encryptedData = encryptData(qrDataPayload) // Placeholder for encryption
+        val encryptedData = encryptData(qrDataPayload) // Using your existing encryptData placeholder
 
         val transaction = Transaction(
-            id = 0, // Auto-generated by Room
+            id = 0,
             type = "SENT",
             amount = amount,
             timestamp = currentTime,
-            details = "To QR: $qrDetails (ID: $transactionId)", // Local record details
-            counterpartyId = transactionId, // The ID of this transaction, acting as a reference
+            details = "To QR: $qrDetails (ID: $transactionId)",
+            counterpartyId = transactionId,
             isSynced = false
         )
 
         viewModelScope.launch {
-            dao.insertTransaction(transaction)
-            _encryptedQrString.value = encryptedData // UI will use this to generate QR image
-            _transactionFeedback.value = "Transaction ready. Show QR code to receiver."
-            // Clear inputs after successful operation for security and usability
+            transactionDao.insertTransaction(transaction)
+            _encryptedQrString.value = encryptedData
+            _transactionFeedback.value = "PIN Verified. Transaction ready. Show QR code." // Updated feedback
+            // Clear inputs after successful operation
             _amountInput.value = ""
             _pinInput.value = ""
         }
     }
 
-    // Placeholder for local PIN validation
-    private fun isValidPin(pin: String): Boolean {
-        // TODO: Implement actual PIN validation logic (e.g., length, complexity, or against a stored hash)
-        return pin.length >= 4 // Example: minimum 4 digits
-    }
-
-    // Placeholder for actual encryption.
-    // In a real app, this would involve robust cryptographic methods.
+    // Placeholder for actual encryption - this was already in your ViewModel
     private fun encryptData(data: String): String {
-        // TODO: Replace with real encryption logic (e.g., AES).
-        //       Ensure the key management is secure.
         println("Encrypting QR Data for Send: $data")
-        // This current implementation is a placeholder and NOT secure.
         return "encrypted_$data" // Simulate encryption
     }
 
@@ -111,4 +120,8 @@ class SendMoneyViewModel(private val dao: TransactionDao) : ViewModel() {
         _encryptedQrString.value = null
         _transactionFeedback.value = null
     }
+
+    // isValidPin function is no longer needed as PinManager handles verification.
+    // If you had complex local format validation for the PIN field before verifying,
+    // you could add a simpler form of it back, but PinManager now does the core check.
 }
